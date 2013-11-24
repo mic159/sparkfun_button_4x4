@@ -34,6 +34,14 @@ enum FadeMode {
   Fade_Max,
 };
 
+enum LedCommand {
+  Command_ClearAll,
+  Command_ClearRectangle,
+  Command_SetLed,
+
+  Command_Max,
+};
+
 struct LedState {
   Color start_color;
   Color target_color;
@@ -115,53 +123,77 @@ unsigned long read_long() {
   return *((unsigned long*)buff);
 }
 
-void update_led(volatile LedState& led, byte action) {}
-
 void handle_action(int bytes) {
-  // Unwrap command
-  byte command = Wire.read(); --bytes;
-  if (command == 0) {
-    for (int y = 0; y < KEYPAD_ROWS; ++y)
-      for (int x = 0; x < KEYPAD_COLS; ++x)
-        leds[y][x].SetColor(Color());
-    return;
-  }
-  if (bytes > 3) {
-    byte action = Wire.read();
-    byte row = Wire.read();
-    byte col = Wire.read();
-    // Make future checks easier
-    bytes -= 3;
+  byte command = Wire.read();
+  --bytes;
 
-    volatile LedState& led = leds[row][col];
-    switch (action) {
-      case Fade_Solid:
-        if (bytes < sizeof(Color)) break;
-        led.SetColor(
-            Color(Wire.read(), Wire.read(), Wire.read())
-          );
-        break;
-      case Fade_Once:
-        if (bytes < sizeof(Color) + sizeof(unsigned long)) break;
-        led.FadeTo(
-            Color(Wire.read(), Wire.read(), Wire.read())
-          , read_long()
-          );
-        break;
-      case Fade_Bounce:
-        if (bytes < sizeof(Color) * 2 + sizeof(unsigned long)) break;
-        led.FadeBounce(
-            Color(Wire.read(), Wire.read(), Wire.read())
-          , Color(Wire.read(), Wire.read(), Wire.read())
-          , read_long()
-          );
-        break;
+  switch (command) {
+    case Command_ClearAll:
+      for (int y = 0; y < KEYPAD_ROWS; ++y)
+        for (int x = 0; x < KEYPAD_COLS; ++x)
+          leds[y][x].SetColor(Color());
+      break;
+    case Command_SetLed:
+      handle_led_update(bytes);
+      break;
+    case Command_ClearRectangle:
+    {
+      if (Wire.available() < 4) return;
+      byte start_row = Wire.read();
+      byte end_row = Wire.read();
+      byte start_col = Wire.read();
+      byte end_col = Wire.read();
+      for (int row = start_row; row < min(end_row, KEYPAD_ROWS); ++row)
+        for (int col = start_col; col < min(end_col, KEYPAD_COLS); ++col)
+          leds[row][col].SetColor(Color());
     }
   }
+}
 
-  // Consume anything still in the buffer...
-  while (Wire.available()) {
-    byte _ = Wire.read();
+void handle_led_update(int bytes) {
+
+  if (!Wire.available()) return;
+  byte num_leds = Wire.read();
+
+  if (Wire.available() < num_leds * 2) return;
+  volatile LedState* curr_leds[16];
+  for (int i = 0; i < num_leds; ++i) {
+    byte row = Wire.read();
+    byte col = Wire.read();
+    curr_leds[i] = &(leds[row][col]);
+  }
+
+  if (!Wire.available()) return;
+  byte action = Wire.read();
+
+  switch (action) {
+    case Fade_Solid:
+    {
+      if (Wire.available() < sizeof(Color)) break;
+      Color c(Wire.read(), Wire.read(), Wire.read());
+      for (int i = 0; i < num_leds; ++i)
+        curr_leds[i]->SetColor(c);
+      break;
+    }
+    case Fade_Once:
+    {
+      if (Wire.available() < sizeof(Color) + sizeof(unsigned long)) break;
+      Color c(Wire.read(), Wire.read(), Wire.read());
+      unsigned long time = read_long();
+      for (int i = 0; i < num_leds; ++i)
+        curr_leds[i]->FadeTo(c, time);
+      break;
+    }
+    case Fade_Bounce:
+    {
+      if (Wire.available() < sizeof(Color) * 2 + sizeof(unsigned long)) break;
+      Color c1(Wire.read(), Wire.read(), Wire.read());
+      Color c2(Wire.read(), Wire.read(), Wire.read());
+      unsigned long time = read_long();
+      for (int i = 0; i < num_leds; ++i)
+        curr_leds[i]->FadeBounce(c1, c2, time);
+      break;
+    }
   }
 }
 
