@@ -206,9 +206,11 @@ void loop()
       leds[i][j].Update(time);
 
   // Read in keypad to internal buffer.
-  bool changed = buttons.getKeys();
-  if (changed) {
-    digitalWrite(INT_PIN, HIGH);
+  if (!digitalRead(INT_PIN)) {
+    bool changed = buttons.getKeys();
+    if (changed) {
+      digitalWrite(INT_PIN, HIGH);
+    }
   }
 
   delay(1);
