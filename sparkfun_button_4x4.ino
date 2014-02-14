@@ -151,7 +151,6 @@ void handle_action(int bytes) {
 }
 
 void handle_led_update(int bytes) {
-
   if (!Wire.available()) return;
   byte num_leds = Wire.read();
 
