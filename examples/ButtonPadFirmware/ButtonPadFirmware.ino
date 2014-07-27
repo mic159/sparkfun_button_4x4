@@ -200,9 +200,11 @@ void loop()
 {
   // Update fading
   unsigned long time = millis();
+  cei();
   for (int i = 0; i < 4; ++i)
     for (int j = 0; j < 4; ++j)
       leds[i][j].Update(time);
+  sei();
 
   // Read in keypad to internal buffer.
   if (!digitalRead(INT_PIN)) {
